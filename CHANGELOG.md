@@ -4,6 +4,52 @@ Motion adheres to [Semantic Versioning](http://semver.org/).
 
 Undocumented APIs should be considered internal and may change without warning.
 
+## [12.10.6] 2025-05-09
+
+### Fixed
+
+-   Stop firing `.then()` after `.stop()` and `.cancel()`.
+
+## [12.10.5] 2025-05-09
+
+### Fixed
+
+-   Fixed attaching multiple `press` handlers on the same element.
+
+## [12.10.4] 2025-05-08
+
+### Fixed
+
+-   Fixed layout animations jumping when interrupted.
+-   Lower memory and runtime overhead of layout animations.
+
+## [12.10.3] 2025-05-08
+
+### Fixed
+
+-   Attempting to fix layout animations jumping when interrupted.
+
+## [12.10.2] 2025-05-08
+
+### Fixed
+
+-   Fixed `.cancel()` after `.stop()`.
+
+## [12.10.1] 2025-05-07
+
+### Changed
+
+-   Main thread `scroll` animations are now lazy, resolving after `"scroll"` events instead of every animation frame.
+
+## [12.10.0] 2025-05-06
+
+### Added
+
+-   `styleEffect` now supports:
+    -   Default value types
+    -   Independent transforms
+    -   CSS variables
+
 ## [12.9.8] 2025-05-05
 
 ### Fixed
