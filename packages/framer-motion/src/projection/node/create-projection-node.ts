@@ -1,13 +1,17 @@
 import {
     activeAnimations,
-    AnimationPlaybackControls,
     cancelFrame,
     frame,
     frameData,
     frameSteps,
     getValueTransition,
+    isSVGElement,
+    isSVGSVGElement,
+    JSAnimation,
     microtask,
     mixNumber,
+    MotionValue,
+    motionValue,
     statsBuffer,
     time,
     ValueAnimationOptions,
@@ -27,7 +31,6 @@ import { animateSingleValue } from "../../animation/animate/single-value"
 import { getOptimisedAppearId } from "../../animation/optimized-appear/get-appear-id"
 import { MotionStyle } from "../../motion/types"
 import { HTMLVisualElement } from "../../projection"
-import { isSVGElement } from "../../render/dom/utils/is-svg-element"
 import { ResolvedValues } from "../../render/types"
 import { FlatTree } from "../../render/utils/flat-tree"
 import { VisualElement } from "../../render/VisualElement"
@@ -438,7 +441,7 @@ export function createProjectionNode<I>({
         mount(instance: I) {
             if (this.instance) return
 
-            this.isSVG = isSVGElement(instance)
+            this.isSVG = isSVGElement(instance) && !isSVGSVGElement(instance)
 
             this.instance = instance
 
@@ -1490,7 +1493,7 @@ export function createProjectionNode<I>({
          */
         animationValues?: ResolvedValues
         pendingAnimation?: Process
-        currentAnimation?: AnimationPlaybackControls
+        currentAnimation?: JSAnimation<number>
         mixTargetDelta: (progress: number) => void
         animationProgress = 0
 
@@ -1592,13 +1595,13 @@ export function createProjectionNode<I>({
             this.mixTargetDelta(this.options.layoutRoot ? 1000 : 0)
         }
 
+        motionValue?: MotionValue<number>
         startAnimation(options: ValueAnimationOptions<number>) {
             this.notifyListeners("animationStart")
 
-            this.currentAnimation && this.currentAnimation.stop()
-            if (this.resumingFrom && this.resumingFrom.currentAnimation) {
-                this.resumingFrom.currentAnimation.stop()
-            }
+            this.currentAnimation?.stop(false)
+            this.resumingFrom?.currentAnimation?.stop(false)
+
             if (this.pendingAnimation) {
                 cancelFrame(this.pendingAnimation)
                 this.pendingAnimation = undefined
@@ -1613,21 +1616,27 @@ export function createProjectionNode<I>({
                 globalProjectionState.hasAnimatedSinceResize = true
 
                 activeAnimations.layout++
-                this.currentAnimation = animateSingleValue(0, animationTarget, {
-                    ...(options as any),
-                    onUpdate: (latest: number) => {
-                        this.mixTargetDelta(latest)
-                        options.onUpdate && options.onUpdate(latest)
-                    },
-                    onStop: () => {
-                        activeAnimations.layout--
-                    },
-                    onComplete: () => {
-                        activeAnimations.layout--
-                        options.onComplete && options.onComplete()
-                        this.completeAnimation()
-                    },
-                })
+                this.motionValue ||= motionValue(0)
+                this.currentAnimation = animateSingleValue(
+                    this.motionValue,
+                    [0, 1000],
+                    {
+                        ...(options as any),
+                        isSync: true,
+                        onUpdate: (latest: number) => {
+                            this.mixTargetDelta(latest)
+                            options.onUpdate && options.onUpdate(latest)
+                        },
+                        onStop: () => {
+                            activeAnimations.layout--
+                        },
+                        onComplete: () => {
+                            activeAnimations.layout--
+                            options.onComplete && options.onComplete()
+                            this.completeAnimation()
+                        },
+                    }
+                ) as JSAnimation<number>
 
                 if (this.resumingFrom) {
                     this.resumingFrom.currentAnimation = this.currentAnimation
@@ -1656,7 +1665,7 @@ export function createProjectionNode<I>({
         finishAnimation() {
             if (this.currentAnimation) {
                 this.mixTargetDelta && this.mixTargetDelta(animationTarget)
-                this.currentAnimation.stop()
+                this.currentAnimation.stop(false)
             }
 
             this.completeAnimation()
@@ -2013,7 +2022,7 @@ export function createProjectionNode<I>({
         // Only run on root
         resetTree() {
             this.root.nodes!.forEach((node: IProjectionNode) =>
-                node.currentAnimation?.stop()
+                node.currentAnimation?.stop(false)
             )
             this.root.nodes!.forEach(clearMeasurements)
             this.root.sharedNodes.clear()

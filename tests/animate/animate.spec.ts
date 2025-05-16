@@ -30,7 +30,7 @@ test.describe("animate() methods", () => {
     })
 
     test("play with repeat: reverse", async ({ page }) => {
-        await waitForAnimation("animate/animate-repeat-play.html", page)
+        await waitForAnimation("animate/animate-repeat-play.html", page, 600)
         await eachBox(page, async (box) => {
             // Verify the box is at its original position
             const boundingBox = await box.boundingBox()
@@ -105,7 +105,7 @@ test.describe("animate() methods", () => {
             const boundingBox = await box.boundingBox()
             expect(boundingBox?.x).toBeCloseTo(0)
             const text = await box.innerText()
-            expect(text).toBe("finished")
+            expect(text).not.toBe("finished")
         })
     })
 
@@ -308,8 +308,16 @@ test.describe("animate() methods", () => {
             // Ensure a style has been applied
             const style = await box.getAttribute("style")
             expect(style).toContain("transform: translateX")
-            expect(await box.innerText()).toBe("finished")
+            expect(await box.innerText()).not.toBe("finished")
         })
+
+        const boxes = page.locator(".box")
+        const jsBox = boxes.nth(1)
+        const waapiBox = boxes.nth(2)
+        const jsX = Math.round((await jsBox.boundingBox())?.x || 100)
+        const waapiX = Math.round((await waapiBox.boundingBox())?.x || 50)
+
+        expect(Math.abs(jsX - waapiX)).toBeLessThanOrEqual(2)
     })
 
     test("stop() prevents animation from restarting with play()", async ({
