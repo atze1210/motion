@@ -153,11 +153,16 @@ export interface AnimationPlaybackLifecycles<V> {
     onComplete?: () => void
     onRepeat?: () => void
     onStop?: () => void
+
+    // @internal
+    onCancel?: () => void
 }
 
 export interface ValueAnimationTransition<V = any>
     extends Transition,
-        AnimationPlaybackLifecycles<V> {}
+        AnimationPlaybackLifecycles<V> {
+    isSync?: boolean
+}
 
 export type RepeatType = "loop" | "reverse" | "mirror"
 

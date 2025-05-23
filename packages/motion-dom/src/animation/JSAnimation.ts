@@ -9,7 +9,7 @@ import { time } from "../frameloop/sync-time"
 import { activeAnimations } from "../stats/animation-count"
 import { mix } from "../utils/mix"
 import { Mixer } from "../utils/mix/types"
-import { frameloopDriver } from "./drivers/driver-frameloop"
+import { frameloopDriver } from "./drivers/frame"
 import { DriverControls } from "./drivers/types"
 import { inertia } from "./generators/inertia"
 import { keyframes as keyframesGenerator } from "./generators/keyframes"
@@ -367,6 +367,8 @@ export class JSAnimation<T extends number | string>
         } else if (this.driver) {
             this.startTime = this.driver.now() - newTime / this.playbackSpeed
         }
+
+        this.driver?.start(false)
     }
 
     get speed() {
@@ -386,13 +388,13 @@ export class JSAnimation<T extends number | string>
     play() {
         if (this.isStopped) return
 
-        const { driver = frameloopDriver, onPlay, startTime } = this.options
+        const { driver = frameloopDriver, startTime } = this.options
 
         if (!this.driver) {
             this.driver = driver((timestamp) => this.tick(timestamp))
         }
 
-        onPlay && onPlay()
+        this.options.onPlay?.()
 
         const now = this.driver.now()
 
@@ -430,17 +432,18 @@ export class JSAnimation<T extends number | string>
      * This method is bound to the instance to fix a pattern where
      * animation.stop is returned as a reference from a useEffect.
      */
-    stop = () => {
-        const { motionValue } = this.options
-        if (motionValue && motionValue.updatedAt !== time.now()) {
-            this.tick(time.now())
+    stop = (sync = true) => {
+        if (sync) {
+            const { motionValue } = this.options
+            if (motionValue && motionValue.updatedAt !== time.now()) {
+                this.tick(time.now())
+            }
         }
 
         this.isStopped = true
         if (this.state === "idle") return
         this.teardown()
-        const { onStop } = this.options
-        onStop && onStop()
+        this.options.onStop?.()
     }
 
     complete() {
@@ -453,11 +456,11 @@ export class JSAnimation<T extends number | string>
     }
 
     finish() {
+        this.notifyFinished()
         this.teardown()
         this.state = "finished"
 
-        const { onComplete } = this.options
-        onComplete && onComplete()
+        this.options.onComplete?.()
     }
 
     cancel() {
@@ -465,10 +468,10 @@ export class JSAnimation<T extends number | string>
         this.startTime = 0
         this.tick(0)
         this.teardown()
+        this.options.onCancel?.()
     }
 
     private teardown() {
-        this.notifyFinished()
         this.state = "idle"
         this.stopDriver()
         this.startTime = this.holdTime = null
@@ -493,6 +496,7 @@ export class JSAnimation<T extends number | string>
             this.initAnimation()
         }
 
+        this.driver?.stop()
         return timeline.observe(this)
     }
 }
