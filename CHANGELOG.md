@@ -4,6 +4,140 @@ Motion adheres to [Semantic Versioning](http://semver.org/).
 
 Undocumented APIs should be considered internal and may change without warning.
 
+## [12.15.1] 2025-05-30
+
+### Fixed
+
+-   Explicitly set layout animation velocity to zero to prevent persistent `MotionValue` carrying through velocity.
+
+## [12.15.0] 2025-05-27
+
+### Added
+
+-   Support for `pathLength`/`pathSpacing`/`pathOffset` for `svgEffect`.
+-   Auto kebab-casing of `data` and `aria` attributes in `attrEffect`.
+-   `attrEffect` applies attributes via JS property where possible.
+-   Auto `transform-box: fill-box` for SVGs with `transform` in `styleEffect`.
+
+## [12.14.0] 2025-05-26
+
+### Added
+
+-   Support for `originX`/`Y`/`Z` in `styleEffect`.
+
+### Fixed
+
+-   Added markers for pure function calls with effects.
+
+## [12.13.0] 2025-05-26
+
+### Added
+
+-   `svgEffect`, `propEffect` and `attrEffect`.
+
+### Fixed
+
+-   Fixed a jump in layout animations in select circumstances.
+
+## [12.12.2] 2025-05-23
+
+### Fixed
+
+-   Ensure scroll updates are only triggered after a scroll read.
+
+## [12.12.1] 2025-05-16
+
+### Fixed
+
+-   Checks for `instanceof HTMLElement` made compatible with dynamically generated `iframe`s.
+
+## [12.12.0] 2025-05-16
+
+### Added
+
+-   `springValue`
+
+### Fixed
+
+-   Fixed various typos in the type definitions along with a stale documentation link.
+
+## [12.11.4] 2025-05-15
+
+### Fixed
+
+-   Only read `transform` from the DOM for initial independent transforms when there's no active projection.
+
+## [12.11.3] 2025-05-14
+
+### Changed
+
+-   `useWillChange` now only adds `transform` to `will-change` to prevent issues with prematurely flattened `preserve-3d`.
+
+## [12.11.2] 2025-05-14
+
+### Fixed
+
+-   Removed `__VERSION__` placeholder from motion value.
+-   Fixed types for `Reorder` component.
+
+## [12.11.1] 2025-05-14
+
+### Fixed
+
+-   Default `scroll` tracking to `document.scrollingElement`.
+
+## [12.11.0] 2025-05-12
+
+### Added
+
+-   Added `value.isEffectActive` for internal use.
+
+## [12.10.6] 2025-05-09
+
+### Fixed
+
+-   Stop firing `.then()` after `.stop()` and `.cancel()`.
+
+## [12.10.5] 2025-05-09
+
+### Fixed
+
+-   Fixed attaching multiple `press` handlers on the same element.
+
+## [12.10.4] 2025-05-08
+
+### Fixed
+
+-   Fixed layout animations jumping when interrupted.
+-   Lower memory and runtime overhead of layout animations.
+
+## [12.10.3] 2025-05-08
+
+### Fixed
+
+-   Attempting to fix layout animations jumping when interrupted.
+
+## [12.10.2] 2025-05-08
+
+### Fixed
+
+-   Fixed `.cancel()` after `.stop()`.
+
+## [12.10.1] 2025-05-07
+
+### Changed
+
+-   Main thread `scroll` animations are now lazy, resolving after `"scroll"` events instead of every animation frame.
+
+## [12.10.0] 2025-05-06
+
+### Added
+
+-   `styleEffect` now supports:
+    -   Default value types
+    -   Independent transforms
+    -   CSS variables
+
 ## [12.9.8] 2025-05-05
 
 ### Fixed
