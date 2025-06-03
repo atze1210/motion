@@ -1,3 +1,4 @@
+import { isHTMLElement } from "../../utils/is-html-element"
 import { ElementOrSelector } from "../../utils/resolve-elements"
 import { isDragActive } from "../drag/state/is-active"
 import { EventOptions } from "../types"
@@ -53,7 +54,7 @@ export function press(
     const startPress = (startEvent: PointerEvent) => {
         const target = startEvent.currentTarget as Element
 
-        if (!isValidPressEvent(startEvent) || isPressing.has(target)) return
+        if (!isValidPressEvent(startEvent)) return
 
         isPressing.add(target)
 
@@ -102,7 +103,7 @@ export function press(
             eventOptions
         )
 
-        if (target instanceof HTMLElement) {
+        if (isHTMLElement(target)) {
             target.addEventListener("focus", (event) =>
                 enableKeyboardPress(event as FocusEvent, eventOptions)
             )
