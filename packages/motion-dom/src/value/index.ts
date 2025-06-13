@@ -69,12 +69,6 @@ export const collectMotionValues: { current: MotionValue[] | undefined } = {
  */
 export class MotionValue<V = any> {
     /**
-     * This will be replaced by the build step with the latest version number.
-     * When MotionValues are provided to motion components, warn if versions are mixed.
-     */
-    version = "__VERSION__"
-
-    /**
      * If a MotionValue has an owner, it was created internally within Motion
      * and therefore has no external listeners. It is therefore safe to animate via WAAPI.
      */
@@ -118,6 +112,11 @@ export class MotionValue<V = any> {
     private stopPassiveEffect?: VoidFunction
 
     /**
+     * Whether the passive effect is active.
+     */
+    isEffectActive?: boolean
+
+    /**
      * A reference to the currently-controlling animation.
      */
     animation?: AnimationPlaybackControlsWithThen
@@ -130,6 +129,12 @@ export class MotionValue<V = any> {
      * @internal
      */
     private canTrackVelocity: boolean | null = null
+
+    /**
+     * A list of MotionValues whose values are computed from this one.
+     * This is a rough start to a proper signal-like dirtying system.
+     */
+    private dependents: Set<MotionValue> | undefined
 
     /**
      * Tracks whether this value should be removed
@@ -303,6 +308,23 @@ export class MotionValue<V = any> {
         if (this.stopPassiveEffect) this.stopPassiveEffect()
     }
 
+    dirty() {
+        this.events.change?.notify(this.current)
+    }
+
+    addDependent(dependent: MotionValue) {
+        if (!this.dependents) {
+            this.dependents = new Set()
+        }
+        this.dependents.add(dependent)
+    }
+
+    removeDependent(dependent: MotionValue) {
+        if (this.dependents) {
+            this.dependents.delete(dependent)
+        }
+    }
+
     updateAndNotify = (v: V, render = true) => {
         const currentTime = time.now()
 
@@ -322,6 +344,12 @@ export class MotionValue<V = any> {
         // Update update subscribers
         if (this.current !== this.prev) {
             this.events.change?.notify(this.current)
+
+            if (this.dependents) {
+                for (const dependent of this.dependents) {
+                    dependent.dirty()
+                }
+            }
         }
 
         // Update render subscribers
@@ -451,6 +479,7 @@ export class MotionValue<V = any> {
      * @public
      */
     destroy() {
+        this.dependents?.clear()
         this.events.destroy?.notify()
         this.clearListeners()
         this.stop()
