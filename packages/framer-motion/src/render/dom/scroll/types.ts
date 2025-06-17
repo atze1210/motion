@@ -2,7 +2,7 @@ import { EasingFunction } from "motion-utils"
 
 export interface ScrollOptions {
     source?: HTMLElement
-    container?: HTMLElement
+    container?: Element
     target?: Element
     axis?: "x" | "y"
     offset?: ScrollOffset
@@ -10,7 +10,7 @@ export interface ScrollOptions {
 
 export interface ScrollOptionsWithDefaults extends ScrollOptions {
     axis: "x" | "y"
-    container: HTMLElement
+    container: Element
 }
 
 export type OnScrollProgress = (progress: number) => void
@@ -43,8 +43,7 @@ export interface ScrollInfo {
 export type OnScrollInfo = (info: ScrollInfo) => void
 
 export type OnScrollHandler = {
-    measure: () => void
-    update: (time: number) => void
+    measure: (time: number) => void
     notify: () => void
 }
 
@@ -65,7 +64,7 @@ export type Intersection = `${Edge} ${Edge}`
 export type ScrollOffset = Array<Edge | Intersection | ProgressIntersection>
 
 export interface ScrollInfoOptions {
-    container?: HTMLElement
+    container?: Element
     target?: Element
     axis?: "x" | "y"
     offset?: ScrollOffset
