@@ -1,15 +1,20 @@
 import {
     activeAnimations,
-    AnimationPlaybackControls,
     cancelFrame,
     frame,
     frameData,
     frameSteps,
     getValueTransition,
+    isSVGElement,
+    isSVGSVGElement,
+    JSAnimation,
     microtask,
     mixNumber,
+    MotionValue,
+    motionValue,
     statsBuffer,
     time,
+    Transition,
     ValueAnimationOptions,
     type Process,
 } from "motion-dom"
@@ -27,11 +32,9 @@ import { animateSingleValue } from "../../animation/animate/single-value"
 import { getOptimisedAppearId } from "../../animation/optimized-appear/get-appear-id"
 import { MotionStyle } from "../../motion/types"
 import { HTMLVisualElement } from "../../projection"
-import { isSVGElement } from "../../render/dom/utils/is-svg-element"
 import { ResolvedValues } from "../../render/types"
 import { FlatTree } from "../../render/utils/flat-tree"
 import { VisualElement } from "../../render/VisualElement"
-import { Transition } from "../../types"
 import { delay } from "../../utils/delay"
 import { resolveMotionValue } from "../../value/utils/resolve-motion-value"
 import { mixValues } from "../animation/mix-values"
@@ -156,6 +159,8 @@ export function createProjectionNode<I>({
          * An id that represents a unique session instigated by startUpdate.
          */
         animationId: number = 0
+
+        animationCommitId = 0
 
         /**
          * A reference to the platform-native node (currently this will be a HTMLElement).
@@ -438,7 +443,7 @@ export function createProjectionNode<I>({
         mount(instance: I) {
             if (this.instance) return
 
-            this.isSVG = isSVGElement(instance)
+            this.isSVG = isSVGElement(instance) && !isSVGSVGElement(instance)
 
             this.instance = instance
 
@@ -542,11 +547,6 @@ export function createProjectionNode<I>({
                                 this.resumingFrom.resumingFrom = undefined
                             }
 
-                            this.setAnimationOrigin(
-                                delta,
-                                hasOnlyRelativeTargetChanged
-                            )
-
                             const animationOptions = {
                                 ...getValueTransition(
                                     layoutTransition,
@@ -565,6 +565,14 @@ export function createProjectionNode<I>({
                             }
 
                             this.startAnimation(animationOptions)
+                            /**
+                             * Set animation origin after starting animation to avoid layout jump
+                             * caused by stopping previous layout animation
+                             */
+                            this.setAnimationOrigin(
+                                delta,
+                                hasOnlyRelativeTargetChanged
+                            )
                         } else {
                             /**
                              * If the layout hasn't changed and we have an animation that hasn't started yet,
@@ -662,6 +670,7 @@ export function createProjectionNode<I>({
             }
 
             !this.root.isUpdating && this.root.startUpdate()
+
             if (this.isLayoutDirty) return
 
             this.isLayoutDirty = true
@@ -706,9 +715,19 @@ export function createProjectionNode<I>({
                 return
             }
 
+            /**
+             * If this is a repeat of didUpdate then ignore the animation.
+             */
+            if (this.animationId <= this.animationCommitId) {
+                this.nodes!.forEach(clearIsLayoutDirty)
+                return
+            }
+
             if (!this.isUpdating) {
                 this.nodes!.forEach(clearIsLayoutDirty)
             }
+
+            this.animationCommitId = this.animationId
 
             this.isUpdating = false
 
@@ -1490,7 +1509,7 @@ export function createProjectionNode<I>({
          */
         animationValues?: ResolvedValues
         pendingAnimation?: Process
-        currentAnimation?: AnimationPlaybackControls
+        currentAnimation?: JSAnimation<number>
         mixTargetDelta: (progress: number) => void
         animationProgress = 0
 
@@ -1592,13 +1611,13 @@ export function createProjectionNode<I>({
             this.mixTargetDelta(this.options.layoutRoot ? 1000 : 0)
         }
 
+        motionValue?: MotionValue<number>
         startAnimation(options: ValueAnimationOptions<number>) {
             this.notifyListeners("animationStart")
 
-            this.currentAnimation && this.currentAnimation.stop()
-            if (this.resumingFrom && this.resumingFrom.currentAnimation) {
-                this.resumingFrom.currentAnimation.stop()
-            }
+            this.currentAnimation?.stop()
+            this.resumingFrom?.currentAnimation?.stop()
+
             if (this.pendingAnimation) {
                 cancelFrame(this.pendingAnimation)
                 this.pendingAnimation = undefined
@@ -1613,21 +1632,29 @@ export function createProjectionNode<I>({
                 globalProjectionState.hasAnimatedSinceResize = true
 
                 activeAnimations.layout++
-                this.currentAnimation = animateSingleValue(0, animationTarget, {
-                    ...(options as any),
-                    onUpdate: (latest: number) => {
-                        this.mixTargetDelta(latest)
-                        options.onUpdate && options.onUpdate(latest)
-                    },
-                    onStop: () => {
-                        activeAnimations.layout--
-                    },
-                    onComplete: () => {
-                        activeAnimations.layout--
-                        options.onComplete && options.onComplete()
-                        this.completeAnimation()
-                    },
-                })
+                this.motionValue ||= motionValue(0)
+
+                this.currentAnimation = animateSingleValue(
+                    this.motionValue,
+                    [0, 1000],
+                    {
+                        ...(options as any),
+                        velocity: 0,
+                        isSync: true,
+                        onUpdate: (latest: number) => {
+                            this.mixTargetDelta(latest)
+                            options.onUpdate && options.onUpdate(latest)
+                        },
+                        onStop: () => {
+                            activeAnimations.layout--
+                        },
+                        onComplete: () => {
+                            activeAnimations.layout--
+                            options.onComplete && options.onComplete()
+                            this.completeAnimation()
+                        },
+                    }
+                ) as JSAnimation<number>
 
                 if (this.resumingFrom) {
                     this.resumingFrom.currentAnimation = this.currentAnimation
