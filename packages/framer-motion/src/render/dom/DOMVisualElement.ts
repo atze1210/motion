@@ -1,6 +1,10 @@
-import { DOMKeyframesResolver, MotionValue } from "motion-dom"
+import {
+    AnyResolvedKeyframe,
+    DOMKeyframesResolver,
+    isMotionValue,
+    MotionValue,
+} from "motion-dom"
 import { MotionProps, MotionStyle } from "../../motion/types"
-import { isMotionValue } from "../../value/utils/is-motion-value"
 import { DOMVisualElementOptions } from "../dom/types"
 import { HTMLRenderState } from "../html/types"
 import { VisualElement } from "../VisualElement"
@@ -22,7 +26,7 @@ export abstract class DOMVisualElement<
     getBaseTargetFromProps(
         props: MotionProps,
         key: string
-    ): string | number | MotionValue<any> | undefined {
+    ): AnyResolvedKeyframe | MotionValue<any> | undefined {
         return props.style
             ? (props.style[key as keyof MotionStyle] as string)
             : undefined

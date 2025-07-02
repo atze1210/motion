@@ -1,15 +1,20 @@
 import {
     activeAnimations,
-    AnimationPlaybackControls,
     cancelFrame,
     frame,
     frameData,
     frameSteps,
     getValueTransition,
+    isSVGElement,
+    isSVGSVGElement,
+    JSAnimation,
     microtask,
     mixNumber,
+    MotionValue,
+    motionValue,
     statsBuffer,
     time,
+    Transition,
     ValueAnimationOptions,
     type Process,
 } from "motion-dom"
@@ -27,11 +32,9 @@ import { animateSingleValue } from "../../animation/animate/single-value"
 import { getOptimisedAppearId } from "../../animation/optimized-appear/get-appear-id"
 import { MotionStyle } from "../../motion/types"
 import { HTMLVisualElement } from "../../projection"
-import { isSVGElement } from "../../render/dom/utils/is-svg-element"
 import { ResolvedValues } from "../../render/types"
 import { FlatTree } from "../../render/utils/flat-tree"
 import { VisualElement } from "../../render/VisualElement"
-import { Transition } from "../../types"
 import { delay } from "../../utils/delay"
 import { resolveMotionValue } from "../../value/utils/resolve-motion-value"
 import { mixValues } from "../animation/mix-values"
@@ -82,8 +85,6 @@ const metrics = {
 }
 
 const transformAxes = ["", "X", "Y", "Z"]
-
-const hiddenVisibility: ResolvedValues = { visibility: "hidden" }
 
 /**
  * We use 1000 as the animation target as 0-1000 maps better to pixels than 0-1
@@ -156,6 +157,8 @@ export function createProjectionNode<I>({
          * An id that represents a unique session instigated by startUpdate.
          */
         animationId: number = 0
+
+        animationCommitId = 0
 
         /**
          * A reference to the platform-native node (currently this will be a HTMLElement).
@@ -438,7 +441,7 @@ export function createProjectionNode<I>({
         mount(instance: I) {
             if (this.instance) return
 
-            this.isSVG = isSVGElement(instance)
+            this.isSVG = isSVGElement(instance) && !isSVGSVGElement(instance)
 
             this.instance = instance
 
@@ -456,11 +459,22 @@ export function createProjectionNode<I>({
 
             if (attachResizeListener) {
                 let cancelDelay: VoidFunction
+                let innerWidth = 0
 
                 const resizeUnblockUpdate = () =>
                     (this.root.updateBlockedByResize = false)
 
+                // Set initial innerWidth in a frame.read callback to batch the read
+                frame.read(() => {
+                    innerWidth = window.innerWidth
+                })
+
                 attachResizeListener(instance, () => {
+                    const newInnerWidth = window.innerWidth
+                    if (newInnerWidth === innerWidth) return
+
+                    innerWidth = newInnerWidth
+
                     this.root.updateBlockedByResize = true
 
                     cancelDelay && cancelDelay()
@@ -542,11 +556,6 @@ export function createProjectionNode<I>({
                                 this.resumingFrom.resumingFrom = undefined
                             }
 
-                            this.setAnimationOrigin(
-                                delta,
-                                hasOnlyRelativeTargetChanged
-                            )
-
                             const animationOptions = {
                                 ...getValueTransition(
                                     layoutTransition,
@@ -565,6 +574,14 @@ export function createProjectionNode<I>({
                             }
 
                             this.startAnimation(animationOptions)
+                            /**
+                             * Set animation origin after starting animation to avoid layout jump
+                             * caused by stopping previous layout animation
+                             */
+                            this.setAnimationOrigin(
+                                delta,
+                                hasOnlyRelativeTargetChanged
+                            )
                         } else {
                             /**
                              * If the layout hasn't changed and we have an animation that hasn't started yet,
@@ -637,6 +654,7 @@ export function createProjectionNode<I>({
 
         willUpdate(shouldNotifyListeners = true) {
             this.root.hasTreeAnimated = true
+
             if (this.root.isUpdateBlocked()) {
                 this.options.onExitComplete && this.options.onExitComplete()
                 return
@@ -662,6 +680,7 @@ export function createProjectionNode<I>({
             }
 
             !this.root.isUpdating && this.root.startUpdate()
+
             if (this.isLayoutDirty) return
 
             this.isLayoutDirty = true
@@ -706,28 +725,39 @@ export function createProjectionNode<I>({
                 return
             }
 
-            if (!this.isUpdating) {
+            /**
+             * If this is a repeat of didUpdate then ignore the animation.
+             */
+            if (this.animationId <= this.animationCommitId) {
                 this.nodes!.forEach(clearIsLayoutDirty)
+                return
             }
 
-            this.isUpdating = false
+            this.animationCommitId = this.animationId
 
-            /**
-             * Write
-             */
-            this.nodes!.forEach(resetTransformStyle)
+            if (!this.isUpdating) {
+                this.nodes!.forEach(clearIsLayoutDirty)
+            } else {
+                this.isUpdating = false
 
-            /**
-             * Read ==================
-             */
-            // Update layout measurements of updated children
-            this.nodes!.forEach(updateLayout)
+                /**
+                 * Write
+                 */
+                this.nodes!.forEach(resetTransformStyle)
 
-            /**
-             * Write
-             */
-            // Notify listeners that the layout is updated
-            this.nodes!.forEach(notifyLayoutUpdate)
+                /**
+                 * Read ==================
+                 */
+                // Update layout measurements of updated children
+                this.nodes!.forEach(updateLayout)
+
+                /**
+                 * Write
+                 */
+                // Notify listeners that the layout is updated
+                this.nodes!.forEach(notifyLayoutUpdate)
+            }
+
             this.clearAllSnapshots()
 
             /**
@@ -838,7 +868,6 @@ export function createProjectionNode<I>({
         updateLayout() {
             if (!this.instance) return
 
-            // TODO: Incorporate into a forwarded scroll offset
             this.updateScroll()
 
             if (
@@ -1490,7 +1519,7 @@ export function createProjectionNode<I>({
          */
         animationValues?: ResolvedValues
         pendingAnimation?: Process
-        currentAnimation?: AnimationPlaybackControls
+        currentAnimation?: JSAnimation<number>
         mixTargetDelta: (progress: number) => void
         animationProgress = 0
 
@@ -1592,13 +1621,13 @@ export function createProjectionNode<I>({
             this.mixTargetDelta(this.options.layoutRoot ? 1000 : 0)
         }
 
+        motionValue?: MotionValue<number>
         startAnimation(options: ValueAnimationOptions<number>) {
             this.notifyListeners("animationStart")
 
-            this.currentAnimation && this.currentAnimation.stop()
-            if (this.resumingFrom && this.resumingFrom.currentAnimation) {
-                this.resumingFrom.currentAnimation.stop()
-            }
+            this.currentAnimation?.stop()
+            this.resumingFrom?.currentAnimation?.stop()
+
             if (this.pendingAnimation) {
                 cancelFrame(this.pendingAnimation)
                 this.pendingAnimation = undefined
@@ -1613,21 +1642,29 @@ export function createProjectionNode<I>({
                 globalProjectionState.hasAnimatedSinceResize = true
 
                 activeAnimations.layout++
-                this.currentAnimation = animateSingleValue(0, animationTarget, {
-                    ...(options as any),
-                    onUpdate: (latest: number) => {
-                        this.mixTargetDelta(latest)
-                        options.onUpdate && options.onUpdate(latest)
-                    },
-                    onStop: () => {
-                        activeAnimations.layout--
-                    },
-                    onComplete: () => {
-                        activeAnimations.layout--
-                        options.onComplete && options.onComplete()
-                        this.completeAnimation()
-                    },
-                })
+                this.motionValue ||= motionValue(0)
+
+                this.currentAnimation = animateSingleValue(
+                    this.motionValue,
+                    [0, 1000],
+                    {
+                        ...(options as any),
+                        velocity: 0,
+                        isSync: true,
+                        onUpdate: (latest: number) => {
+                            this.mixTargetDelta(latest)
+                            options.onUpdate && options.onUpdate(latest)
+                        },
+                        onStop: () => {
+                            activeAnimations.layout--
+                        },
+                        onComplete: () => {
+                            activeAnimations.layout--
+                            options.onComplete && options.onComplete()
+                            this.completeAnimation()
+                        },
+                    }
+                ) as JSAnimation<number>
 
                 if (this.resumingFrom) {
                     this.resumingFrom.currentAnimation = this.currentAnimation
@@ -1860,15 +1897,15 @@ export function createProjectionNode<I>({
             visualElement.scheduleRender()
         }
 
-        getProjectionStyles(styleProp?: MotionStyle) {
-            if (!this.instance || this.isSVG) return undefined
+        applyProjectionStyles(
+            targetStyle: any, // CSSStyleDeclaration - doesn't allow numbers to be assigned to properties
+            styleProp?: MotionStyle
+        ) {
+            if (!this.instance || this.isSVG) return
 
             if (!this.isVisible) {
-                return hiddenVisibility
-            }
-
-            const styles: ResolvedValues = {
-                visibility: "",
+                targetStyle.visibility = "hidden"
+                return
             }
 
             const transformTemplate = this.getTransformTemplate()
@@ -1876,61 +1913,64 @@ export function createProjectionNode<I>({
             if (this.needsReset) {
                 this.needsReset = false
 
-                styles.opacity = ""
-                styles.pointerEvents =
+                targetStyle.visibility = ""
+                targetStyle.opacity = ""
+                targetStyle.pointerEvents =
                     resolveMotionValue(styleProp?.pointerEvents) || ""
-                styles.transform = transformTemplate
+                targetStyle.transform = transformTemplate
                     ? transformTemplate(this.latestValues, "")
                     : "none"
-                return styles
+                return
             }
 
             const lead = this.getLead()
             if (!this.projectionDelta || !this.layout || !lead.target) {
-                const emptyStyles: ResolvedValues = {}
                 if (this.options.layoutId) {
-                    emptyStyles.opacity =
+                    targetStyle.opacity =
                         this.latestValues.opacity !== undefined
                             ? this.latestValues.opacity
                             : 1
-                    emptyStyles.pointerEvents =
+                    targetStyle.pointerEvents =
                         resolveMotionValue(styleProp?.pointerEvents) || ""
                 }
                 if (this.hasProjected && !hasTransform(this.latestValues)) {
-                    emptyStyles.transform = transformTemplate
+                    targetStyle.transform = transformTemplate
                         ? transformTemplate({}, "")
                         : "none"
                     this.hasProjected = false
                 }
 
-                return emptyStyles
+                return
             }
+
+            targetStyle.visibility = ""
 
             const valuesToRender = lead.animationValues || lead.latestValues
             this.applyTransformsToTarget()
 
-            styles.transform = buildProjectionTransform(
+            let transform = buildProjectionTransform(
                 this.projectionDeltaWithTransform!,
                 this.treeScale,
                 valuesToRender
             )
 
             if (transformTemplate) {
-                styles.transform = transformTemplate(
-                    valuesToRender,
-                    styles.transform
-                )
+                transform = transformTemplate(valuesToRender, transform)
             }
 
+            targetStyle.transform = transform
+
             const { x, y } = this.projectionDelta
-            styles.transformOrigin = `${x.origin * 100}% ${y.origin * 100}% 0`
+            targetStyle.transformOrigin = `${x.origin * 100}% ${
+                y.origin * 100
+            }% 0`
 
             if (lead.animationValues) {
                 /**
                  * If the lead component is animating, assign this either the entering/leaving
                  * opacity
                  */
-                styles.opacity =
+                targetStyle.opacity =
                     lead === this
                         ? valuesToRender.opacity ??
                           this.latestValues.opacity ??
@@ -1943,7 +1983,7 @@ export function createProjectionNode<I>({
                  * Or we're not animating at all, set the lead component to its layout
                  * opacity and other components to hidden.
                  */
-                styles.opacity =
+                targetStyle.opacity =
                     lead === this
                         ? valuesToRender.opacity !== undefined
                             ? valuesToRender.opacity
@@ -1968,14 +2008,14 @@ export function createProjectionNode<I>({
                  * a corresponding layout animation.
                  */
                 const corrected =
-                    styles.transform === "none"
+                    transform === "none"
                         ? valuesToRender[key]
                         : correct(valuesToRender[key], lead)
 
                 if (applyTo) {
                     const num = applyTo.length
                     for (let i = 0; i < num; i++) {
-                        styles[applyTo[i]] = corrected
+                        targetStyle[applyTo[i] as any] = corrected
                     }
                 } else {
                     // If this is a CSS variable, set it directly on the instance.
@@ -1986,7 +2026,7 @@ export function createProjectionNode<I>({
                             this.options.visualElement as HTMLVisualElement
                         ).renderState.vars[key] = corrected
                     } else {
-                        styles[key] = corrected
+                        targetStyle[key as any] = corrected
                     }
                 }
             }
@@ -1997,13 +2037,11 @@ export function createProjectionNode<I>({
              * pointer events on the lead.
              */
             if (this.options.layoutId) {
-                styles.pointerEvents =
+                targetStyle.pointerEvents =
                     lead === this
                         ? resolveMotionValue(styleProp?.pointerEvents) || ""
                         : "none"
             }
-
-            return styles
         }
 
         clearSnapshot() {

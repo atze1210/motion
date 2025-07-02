@@ -1,5 +1,4 @@
-import { MotionValue } from "motion-dom"
-import { isMotionValue } from "./is-motion-value"
+import { AnyResolvedKeyframe, isMotionValue, MotionValue } from "motion-dom"
 
 /**
  * If the provided value is a MotionValue, this returns the actual value, otherwise just the value itself
@@ -7,7 +6,7 @@ import { isMotionValue } from "./is-motion-value"
  * TODO: Remove and move to library
  */
 export function resolveMotionValue(
-    value?: string | number | MotionValue
-): string | number {
+    value?: AnyResolvedKeyframe | MotionValue
+): AnyResolvedKeyframe {
     return isMotionValue(value) ? value.get() : value
 }

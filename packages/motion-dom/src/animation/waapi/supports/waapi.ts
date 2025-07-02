@@ -1,5 +1,10 @@
 import { memo } from "motion-utils"
-import { ValueAnimationOptionsWithRenderContext } from "../../types"
+import { isHTMLElement } from "../../../utils/is-html-element"
+import {
+    AnyResolvedKeyframe,
+    ValueAnimationOptionsWithRenderContext,
+} from "../../types"
+
 /**
  * A list of values that can be hardware-accelerated.
  */
@@ -8,8 +13,7 @@ const acceleratedValues = new Set<string>([
     "clipPath",
     "filter",
     "transform",
-    // TODO: Can be accelerated but currently disabled until https://issues.chromium.org/issues/41491098 is resolved
-    // or until we implement support for linear() easing.
+    // TODO: Could be re-enabled now we have support for linear() easing
     // "background-color"
 ])
 
@@ -17,16 +21,13 @@ const supportsWaapi = /*@__PURE__*/ memo(() =>
     Object.hasOwnProperty.call(Element.prototype, "animate")
 )
 
-export function supportsBrowserAnimation<T extends string | number>(
+export function supportsBrowserAnimation<T extends AnyResolvedKeyframe>(
     options: ValueAnimationOptionsWithRenderContext<T>
 ) {
     const { motionValue, name, repeatDelay, repeatType, damping, type } =
         options
-    if (
-        !motionValue ||
-        !motionValue.owner ||
-        !(motionValue.owner.current instanceof HTMLElement)
-    ) {
+
+    if (!isHTMLElement(motionValue?.owner?.current)) {
         return false
     }
 

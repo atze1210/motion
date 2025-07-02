@@ -1,4 +1,3 @@
-import type { MotionValue } from "motion-dom"
 import {
     AnimationScope,
     createGeneratorEasing,
@@ -8,8 +7,11 @@ import {
     fillOffset,
     GeneratorFactory,
     isGenerator,
+    isMotionValue,
     Transition,
     UnresolvedValueKeyframe,
+    type AnyResolvedKeyframe,
+    type MotionValue,
 } from "motion-dom"
 import {
     Easing,
@@ -18,7 +20,6 @@ import {
     progress,
     secondsToMilliseconds,
 } from "motion-utils"
-import { isMotionValue } from "../../value/utils/is-motion-value"
 import { resolveSubjects } from "../animate/resolve-subjects"
 import {
     AnimationSequence,
@@ -131,7 +132,7 @@ export function createAnimationsFromSequence(
             const numKeyframes = valueKeyframesAsList.length
             const createGenerator = isGenerator(type)
                 ? type
-                : generators?.[type]
+                : generators?.[type || "keyframes"]
 
             if (numKeyframes <= 2 && createGenerator) {
                 /**
@@ -256,7 +257,7 @@ export function createAnimationsFromSequence(
         if (isMotionValue(subject)) {
             const subjectSequence = getSubjectSequence(subject, sequences)
             resolveValueSequence(
-                keyframes as string | number,
+                keyframes as AnyResolvedKeyframe,
                 transition,
                 getValueSequence("default", subjectSequence)
             )
