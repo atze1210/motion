@@ -1,20 +1,19 @@
-import { MotionValue } from "motion-dom"
+import { AnyResolvedKeyframe, isMotionValue, MotionValue } from "motion-dom"
 import { HTMLProps, useMemo } from "react"
 import { MotionProps } from "../../motion/types"
 import { isForcedMotionValue } from "../../motion/utils/is-forced-motion-value"
-import { isMotionValue } from "../../value/utils/is-motion-value"
 import { ResolvedValues } from "../types"
 import { buildHTMLStyles } from "./utils/build-styles"
 import { createHtmlRenderState } from "./utils/create-render-state"
 
 export function copyRawValuesOnly(
     target: ResolvedValues,
-    source: { [key: string]: string | number | MotionValue },
+    source: { [key: string]: AnyResolvedKeyframe | MotionValue },
     props: MotionProps
 ) {
     for (const key in source) {
         if (!isMotionValue(source[key]) && !isForcedMotionValue(key, props)) {
-            target[key] = source[key] as string | number
+            target[key] = source[key] as AnyResolvedKeyframe
         }
     }
 }

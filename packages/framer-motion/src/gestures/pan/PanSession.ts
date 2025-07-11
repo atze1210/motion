@@ -1,3 +1,4 @@
+import type { EventInfo, PanHandler } from "motion-dom"
 import { cancelFrame, frame, frameData, isPrimaryPointer } from "motion-dom"
 import {
     millisecondsToSeconds,
@@ -8,85 +9,8 @@ import {
 } from "motion-utils"
 import { addPointerEvent } from "../../events/add-pointer-event"
 import { extractEventInfo } from "../../events/event-info"
-import { EventInfo } from "../../events/types"
 import { distance2D } from "../../utils/distance"
 
-/**
- * Passed in to pan event handlers like `onPan` the `PanInfo` object contains
- * information about the current state of the tap gesture such as its
- * `point`, `delta`, `offset` and `velocity`.
- *
- * ```jsx
- * <motion.div onPan={(event, info) => {
- *   console.log(info.point.x, info.point.y)
- * }} />
- * ```
- *
- * @public
- */
-export interface PanInfo {
-    /**
-     * Contains `x` and `y` values for the current pan position relative
-     * to the device or page.
-     *
-     * ```jsx
-     * function onPan(event, info) {
-     *   console.log(info.point.x, info.point.y)
-     * }
-     *
-     * <motion.div onPan={onPan} />
-     * ```
-     *
-     * @public
-     */
-    point: Point
-    /**
-     * Contains `x` and `y` values for the distance moved since
-     * the last event.
-     *
-     * ```jsx
-     * function onPan(event, info) {
-     *   console.log(info.delta.x, info.delta.y)
-     * }
-     *
-     * <motion.div onPan={onPan} />
-     * ```
-     *
-     * @public
-     */
-    delta: Point
-    /**
-     * Contains `x` and `y` values for the distance moved from
-     * the first pan event.
-     *
-     * ```jsx
-     * function onPan(event, info) {
-     *   console.log(info.offset.x, info.offset.y)
-     * }
-     *
-     * <motion.div onPan={onPan} />
-     * ```
-     *
-     * @public
-     */
-    offset: Point
-    /**
-     * Contains `x` and `y` values for the current velocity of the pointer, in px/ms.
-     *
-     * ```jsx
-     * function onPan(event, info) {
-     *   console.log(info.velocity.x, info.velocity.y)
-     * }
-     *
-     * <motion.div onPan={onPan} />
-     * ```
-     *
-     * @public
-     */
-    velocity: Point
-}
-
-export type PanHandler = (event: Event, info: PanInfo) => void
 interface PanSessionHandlers {
     onSessionStart: PanHandler
     onStart: PanHandler
@@ -99,6 +23,7 @@ interface PanSessionHandlers {
 interface PanSessionOptions {
     transformPagePoint?: TransformPoint
     dragSnapToOrigin?: boolean
+    distanceThreshold?: number
     contextWindow?: (Window & typeof globalThis) | null
 }
 
@@ -153,6 +78,13 @@ export class PanSession {
     private dragSnapToOrigin: boolean
 
     /**
+     * The distance after which panning should start.
+     *
+     * @internal
+     */
+    private distanceThreshold: number
+
+    /**
      * @internal
      */
     private contextWindow: PanSessionOptions["contextWindow"] = window
@@ -162,8 +94,9 @@ export class PanSession {
         handlers: Partial<PanSessionHandlers>,
         {
             transformPagePoint,
-            contextWindow,
+            contextWindow = window,
             dragSnapToOrigin = false,
+            distanceThreshold = 3,
         }: PanSessionOptions = {}
     ) {
         // If we have more than one touch, don't start detecting this gesture
@@ -172,6 +105,7 @@ export class PanSession {
         this.dragSnapToOrigin = dragSnapToOrigin
         this.handlers = handlers
         this.transformPagePoint = transformPagePoint
+        this.distanceThreshold = distanceThreshold
         this.contextWindow = contextWindow || window
 
         const info = extractEventInfo(event)
@@ -213,9 +147,9 @@ export class PanSession {
 
         // Only start panning if the offset is larger than 3 pixels. If we make it
         // any larger than this we'll want to reset the pointer history
-        // on the first update to avoid visual snapping to the cursoe.
+        // on the first update to avoid visual snapping to the cursor.
         const isDistancePastThreshold =
-            distance2D(info.offset, { x: 0, y: 0 }) >= 3
+            distance2D(info.offset, { x: 0, y: 0 }) >= this.distanceThreshold
 
         if (!isPanStarted && !isDistancePastThreshold) return
 

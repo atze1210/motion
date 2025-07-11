@@ -1,16 +1,17 @@
 import {
     AnimationPlaybackControlsWithThen,
+    AnyResolvedKeyframe,
     motionValue as createMotionValue,
+    isMotionValue,
     MotionValue,
+    UnresolvedValueKeyframe,
     ValueAnimationTransition,
 } from "motion-dom"
-import { GenericKeyframesTarget } from "../../types"
-import { isMotionValue } from "../../value/utils/is-motion-value"
 import { animateMotionValue } from "../interfaces/motion-value"
 
-export function animateSingleValue<V extends string | number>(
+export function animateSingleValue<V extends AnyResolvedKeyframe>(
     value: MotionValue<V> | V,
-    keyframes: V | GenericKeyframesTarget<V>,
+    keyframes: V | UnresolvedValueKeyframe<V>[],
     options?: ValueAnimationTransition
 ): AnimationPlaybackControlsWithThen {
     const motionValue = isMotionValue(value) ? value : createMotionValue(value)

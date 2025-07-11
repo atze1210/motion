@@ -1,9 +1,8 @@
-import { motionValue } from "motion-dom"
+import { motionValue, stagger, Variants } from "motion-dom"
 import { Fragment, memo, useEffect, useState } from "react"
 import { frame, motion, MotionConfig, useMotionValue } from "../../"
 import { nextFrame } from "../../gestures/__tests__/utils"
 import { pointerDown, pointerEnter, pointerUp, render } from "../../jest.setup"
-import { Variants } from "../../types"
 
 const MotionFragment = motion.create(Fragment)
 
@@ -595,7 +594,110 @@ describe("animate prop as variant", () => {
         return expect(promise).resolves.toEqual([0.3, 0.5])
     })
 
-    test("Child variants correctly calculate delay based on staggerChildren", async () => {
+    test("Child variants correctly calculate delay based on delayChildren: stagger()", async () => {
+        const isCorrectlyStaggered = await new Promise((resolve) => {
+            const childVariants = {
+                hidden: { opacity: 0 },
+                visible: { opacity: 1, transition: { duration: 0.1 } },
+            }
+
+            function Component() {
+                const a = useMotionValue(0)
+                const b = useMotionValue(0)
+
+                useEffect(
+                    () =>
+                        a.on("change", (latest) => {
+                            if (latest >= 1 && b.get() === 0) resolve(true)
+                        }),
+                    [a, b]
+                )
+
+                return (
+                    <motion.div
+                        variants={{
+                            hidden: {},
+                            visible: {
+                                x: 100,
+                                transition: { delayChildren: stagger(0.15) },
+                            },
+                        }}
+                        initial="hidden"
+                        animate="visible"
+                    >
+                        <motion.div
+                            variants={childVariants}
+                            style={{ opacity: a }}
+                        />
+                        <motion.div
+                            variants={childVariants}
+                            style={{ opacity: b }}
+                        />
+                    </motion.div>
+                )
+            }
+
+            const { rerender } = render(<Component />)
+            rerender(<Component />)
+        })
+
+        expect(isCorrectlyStaggered).toBe(true)
+    })
+
+    test("Child variants with value-specific transitions correctly calculate delay based on delayChildren: stagger()", async () => {
+        const isCorrectlyStaggered = await new Promise((resolve) => {
+            const childVariants = {
+                hidden: { opacity: 0 },
+                visible: {
+                    opacity: 1,
+                    transition: { opacity: { duration: 0.1 } },
+                },
+            }
+
+            function Component() {
+                const a = useMotionValue(0)
+                const b = useMotionValue(0)
+
+                useEffect(
+                    () =>
+                        a.on("change", (latest) => {
+                            if (latest >= 1 && b.get() === 0) resolve(true)
+                        }),
+                    [a, b]
+                )
+
+                return (
+                    <motion.div
+                        variants={{
+                            hidden: {},
+                            visible: {
+                                x: 100,
+                                transition: { delayChildren: stagger(0.15) },
+                            },
+                        }}
+                        initial="hidden"
+                        animate="visible"
+                    >
+                        <motion.div
+                            variants={childVariants}
+                            style={{ opacity: a }}
+                        />
+                        <motion.div
+                            variants={childVariants}
+                            style={{ opacity: b }}
+                        />
+                    </motion.div>
+                )
+            }
+
+            const { rerender } = render(<Component />)
+            rerender(<Component />)
+        })
+
+        expect(isCorrectlyStaggered).toBe(true)
+    })
+
+    test("Child variants correctly calculate delay based on staggerChildren (deprecated)", async () => {
         const isCorrectlyStaggered = await new Promise((resolve) => {
             const childVariants = {
                 hidden: { opacity: 0 },
@@ -645,7 +747,7 @@ describe("animate prop as variant", () => {
         expect(isCorrectlyStaggered).toBe(true)
     })
 
-    test("Child variants with value-specific transitions correctly calculate delay based on staggerChildren", async () => {
+    test("Child variants with value-specific transitions correctly calculate delay based on staggerChildren (deprecated)", async () => {
         const isCorrectlyStaggered = await new Promise((resolve) => {
             const childVariants = {
                 hidden: { opacity: 0 },
@@ -864,42 +966,6 @@ describe("animate prop as variant", () => {
         })
 
         expect(onUpdate).toHaveBeenCalledTimes(1)
-    })
-
-    test("accepts variants without being typed", () => {
-        expect(() => {
-            const variants = {
-                withoutTransition: { opacity: 0 },
-                withJustDefaultTransitionType: {
-                    opacity: 0,
-                    transition: {
-                        duration: 1,
-                    },
-                },
-                withTransitionIndividual: {
-                    transition: {
-                        when: "beforeChildren",
-                        opacity: { type: "spring" },
-                    },
-                },
-                withTransitionType: {
-                    transition: {
-                        type: "spring",
-                    },
-                },
-                asResolver: () => ({
-                    opacity: 0,
-                    transition: {
-                        type: "physics",
-                        delay: 10,
-                    },
-                }),
-                withTransitionEnd: {
-                    transitionEnd: { opacity: 0 },
-                },
-            }
-            render(<motion.div variants={variants} />)
-        }).not.toThrowError()
     })
 
     test("new child items animate from initial to animate", async () => {

@@ -1,5 +1,9 @@
 import { memo } from "motion-utils"
-import { ValueAnimationOptionsWithRenderContext } from "../../types"
+import {
+    AnyResolvedKeyframe,
+    ValueAnimationOptionsWithRenderContext,
+} from "../../types"
+
 /**
  * A list of values that can be hardware-accelerated.
  */
@@ -8,8 +12,7 @@ const acceleratedValues = new Set<string>([
     "clipPath",
     "filter",
     "transform",
-    // TODO: Can be accelerated but currently disabled until https://issues.chromium.org/issues/41491098 is resolved
-    // or until we implement support for linear() easing.
+    // TODO: Could be re-enabled now we have support for linear() easing
     // "background-color"
 ])
 
@@ -17,20 +20,25 @@ const supportsWaapi = /*@__PURE__*/ memo(() =>
     Object.hasOwnProperty.call(Element.prototype, "animate")
 )
 
-export function supportsBrowserAnimation<T extends string | number>(
+export function supportsBrowserAnimation<T extends AnyResolvedKeyframe>(
     options: ValueAnimationOptionsWithRenderContext<T>
 ) {
     const { motionValue, name, repeatDelay, repeatType, damping, type } =
         options
-    if (
-        !motionValue ||
-        !motionValue.owner ||
-        !(motionValue.owner.current instanceof HTMLElement)
-    ) {
+
+    const subject = motionValue?.owner?.current
+
+    /**
+     * We use this check instead of isHTMLElement() because we explicitly
+     * **don't** want elements in different timing contexts (i.e. popups)
+     * to be accelerated, as it's not possible to sync these animations
+     * properly with those driven from the main window frameloop.
+     */
+    if (!(subject instanceof HTMLElement)) {
         return false
     }
 
-    const { onUpdate, transformTemplate } = motionValue.owner.getProps()
+    const { onUpdate, transformTemplate } = motionValue!.owner!.getProps()
 
     return (
         supportsWaapi() &&

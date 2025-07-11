@@ -10,6 +10,7 @@ import {
 import { NativeAnimationExtended } from "./NativeAnimationExtended"
 import {
     AnimationPlaybackControls,
+    AnyResolvedKeyframe,
     TimelineWithFallback,
     ValueAnimationOptions,
 } from "./types"
@@ -27,12 +28,12 @@ import { supportsBrowserAnimation } from "./waapi/supports/waapi"
  */
 const MAX_RESOLVE_DELAY = 40
 
-type OptionsWithoutKeyframes<T extends string | number> = Omit<
+type OptionsWithoutKeyframes<T extends AnyResolvedKeyframe> = Omit<
     ValueAnimationOptions<T>,
     "keyframes"
 >
 
-export class AsyncMotionValueAnimation<T extends string | number>
+export class AsyncMotionValueAnimation<T extends AnyResolvedKeyframe>
     extends WithPromise
     implements AnimationPlaybackControls
 {
@@ -191,6 +192,7 @@ export class AsyncMotionValueAnimation<T extends string | number>
 
     get animation(): AnimationPlaybackControls {
         if (!this._animation) {
+            this.keyframeResolver?.resume()
             flushKeyframeResolvers()
         }
 
@@ -248,7 +250,11 @@ export class AsyncMotionValueAnimation<T extends string | number>
     }
 
     cancel() {
-        this.animation.cancel()
+        if (this._animation) {
+            this.animation.cancel()
+        }
+
+        this.keyframeResolver?.cancel()
     }
 
     /**
@@ -258,8 +264,8 @@ export class AsyncMotionValueAnimation<T extends string | number>
         if (this._animation) {
             this._animation.stop()
             this.stopTimeline?.()
-        } else {
-            this.keyframeResolver?.cancel()
         }
+
+        this.keyframeResolver?.cancel()
     }
 }

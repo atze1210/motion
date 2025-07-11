@@ -54,7 +54,7 @@ function createMixers<T>(
  * mixColor(0.5) // 'rgba(128, 128, 128, 1)'
  * ```
  *
- * TODO Revist this approach once we've moved to data models for values,
+ * TODO Revisit this approach once we've moved to data models for values,
  * probably not needed to pregenerate mixer functions.
  *
  * @public
@@ -68,7 +68,8 @@ export function interpolate<T>(
 
     invariant(
         inputLength === output.length,
-        "Both input and output ranges must be the same length"
+        "Both input and output ranges must be the same length",
+        "range-length"
     )
 
     /**

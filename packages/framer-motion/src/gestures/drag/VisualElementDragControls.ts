@@ -1,4 +1,12 @@
-import { frame, mixNumber, percent, setDragLock } from "motion-dom"
+import {
+    PanInfo,
+    ResolvedConstraints,
+    Transition,
+    frame,
+    mixNumber,
+    percent,
+    setDragLock,
+} from "motion-dom"
 import { Axis, Point, invariant } from "motion-utils"
 import { animateMotionValue } from "../../animation/interfaces/motion-value"
 import { addDomEvent } from "../../events/add-dom-event"
@@ -15,12 +23,10 @@ import { LayoutUpdateData } from "../../projection/node/types"
 import { eachAxis } from "../../projection/utils/each-axis"
 import { measurePageBox } from "../../projection/utils/measure"
 import type { VisualElement } from "../../render/VisualElement"
-import { Transition } from "../../types"
 import { getContextWindow } from "../../utils/get-context-window"
 import { isRefObject } from "../../utils/is-ref-object"
 import { addValueToWillChange } from "../../value/use-will-change/add-will-change"
-import { PanInfo, PanSession } from "../pan/PanSession"
-import { ResolvedConstraints } from "./types"
+import { PanSession } from "../pan/PanSession"
 import {
     applyConstraints,
     calcOrigin,
@@ -30,22 +36,29 @@ import {
     rebaseAxisConstraints,
     resolveDragElastic,
 } from "./utils/constraints"
+
 export const elementDragControls = new WeakMap<
     VisualElement,
     VisualElementDragControls
 >()
 
 export interface DragControlOptions {
+    /**
+     * This distance after which dragging starts and a direction is locked in.
+     *
+     * @public
+     */
+    distanceThreshold?: number
+
+    /**
+     * Whether to immediately snap to the cursor when dragging starts.
+     *
+     * @public
+     */
     snapToCursor?: boolean
-    cursorProgress?: Point
 }
 
 type DragDirection = "x" | "y"
-
-/**
- *
- */
-// let latestPointerEvent: PointerEvent
 
 export class VisualElementDragControls {
     private visualElement: VisualElement<HTMLElement>
@@ -71,13 +84,23 @@ export class VisualElementDragControls {
      */
     private elastic = createBox()
 
+    /**
+     * The latest pointer event. Used as fallback when the `cancel` and `stop` functions are called without arguments.
+     */
+    private latestPointerEvent: PointerEvent | null = null
+
+    /**
+     * The latest pan info. Used as fallback when the `cancel` and `stop` functions are called without arguments.
+     */
+    private latestPanInfo: PanInfo | null = null
+
     constructor(visualElement: VisualElement<HTMLElement>) {
         this.visualElement = visualElement
     }
 
     start(
         originEvent: PointerEvent,
-        { snapToCursor = false }: DragControlOptions = {}
+        { snapToCursor = false, distanceThreshold }: DragControlOptions = {}
     ) {
         /**
          * Don't start dragging if this component is exiting
@@ -110,6 +133,8 @@ export class VisualElementDragControls {
                 if (!this.openDragLock) return
             }
 
+            this.latestPointerEvent = event
+            this.latestPanInfo = info
             this.isDragging = true
 
             this.currentDirection = null
@@ -158,7 +183,8 @@ export class VisualElementDragControls {
         }
 
         const onMove = (event: PointerEvent, info: PanInfo) => {
-            // latestPointerEvent = event
+            this.latestPointerEvent = event
+            this.latestPanInfo = info
 
             const {
                 dragPropagation,
@@ -202,8 +228,15 @@ export class VisualElementDragControls {
             onDrag && onDrag(event, info)
         }
 
-        const onSessionEnd = (event: PointerEvent, info: PanInfo) =>
+        const onSessionEnd = (event: PointerEvent, info: PanInfo) => {
+            this.latestPointerEvent = event
+            this.latestPanInfo = info
+
             this.stop(event, info)
+
+            this.latestPointerEvent = null
+            this.latestPanInfo = null
+        }
 
         const resumeAnimation = () =>
             eachAxis(
@@ -225,35 +258,49 @@ export class VisualElementDragControls {
             {
                 transformPagePoint: this.visualElement.getTransformPagePoint(),
                 dragSnapToOrigin,
+                distanceThreshold,
                 contextWindow: getContextWindow(this.visualElement),
             }
         )
     }
 
-    private stop(event: PointerEvent, info: PanInfo) {
+    /**
+     * @internal
+     */
+    stop(event?: PointerEvent, panInfo?: PanInfo) {
+        const finalEvent = event || this.latestPointerEvent
+        const finalPanInfo = panInfo || this.latestPanInfo
+
         const isDragging = this.isDragging
         this.cancel()
-        if (!isDragging) return
+        if (!isDragging || !finalPanInfo || !finalEvent) return
 
-        const { velocity } = info
+        const { velocity } = finalPanInfo
         this.startAnimation(velocity)
 
         const { onDragEnd } = this.getProps()
         if (onDragEnd) {
-            frame.postRender(() => onDragEnd(event, info))
+            frame.postRender(() => onDragEnd(finalEvent, finalPanInfo))
         }
     }
 
-    private cancel() {
+    /**
+     * @internal
+     */
+    cancel() {
         this.isDragging = false
+
         const { projection, animationState } = this.visualElement
+
         if (projection) {
             projection.isAnimationBlocked = false
         }
+
         this.panSession && this.panSession.end()
         this.panSession = undefined
 
         const { dragPropagation } = this.getProps()
+
         if (!dragPropagation && this.openDragLock) {
             this.openDragLock()
             this.openDragLock = null
@@ -344,7 +391,8 @@ export class VisualElementDragControls {
 
         invariant(
             constraintsElement !== null,
-            "If `dragConstraints` is set as a React ref, that ref must be passed to another component's `ref` prop."
+            "If `dragConstraints` is set as a React ref, that ref must be passed to another component's `ref` prop.",
+            "drag-constraints-ref"
         )
 
         const { projection } = this.visualElement
@@ -412,7 +460,7 @@ export class VisualElementDragControls {
             const bounceStiffness = dragElastic ? 200 : 1000000
             const bounceDamping = dragElastic ? 40 : 10000000
 
-            const inertia = {
+            const inertia: Transition = {
                 type: "inertia",
                 velocity: dragMomentum ? velocity[axis] : 0,
                 bounceStiffness,

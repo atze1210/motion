@@ -38,7 +38,11 @@ export function animateElements(
     >
     const numElements = elements.length
 
-    invariant(Boolean(numElements), "No valid element provided.")
+    invariant(
+        Boolean(numElements),
+        "No valid elements provided.",
+        "no-valid-elements"
+    )
 
     /**
      * WAAPI doesn't support interrupting animations.
@@ -64,7 +68,7 @@ export function animateElements(
      */
     for (let i = 0; i < numElements; i++) {
         const element = elements[i]
-        const elementTransition = { ...options }
+        const elementTransition: DynamicAnimationOptions = { ...options }
 
         /**
          * Resolve stagger function if provided.

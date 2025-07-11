@@ -1,5 +1,6 @@
 "use client"
 
+import { isHTMLElement } from "motion-dom"
 import * as React from "react"
 import { useContext, useId, useInsertionEffect, useRef } from "react"
 
@@ -17,6 +18,7 @@ interface Props {
     children: React.ReactElement
     isPresent: boolean
     anchorX?: "left" | "right"
+    root?: HTMLElement | ShadowRoot
 }
 
 interface MeasureProps extends Props {
@@ -33,8 +35,9 @@ class PopChildMeasure extends React.Component<MeasureProps> {
         const element = this.props.childRef.current
         if (element && prevProps.isPresent && !this.props.isPresent) {
             const parent = element.offsetParent
-            const parentWidth =
-                parent instanceof HTMLElement ? parent.offsetWidth || 0 : 0
+            const parentWidth = isHTMLElement(parent)
+                ? parent.offsetWidth || 0
+                : 0
 
             const size = this.props.sizeRef.current!
             size.height = element.offsetHeight || 0
@@ -57,7 +60,7 @@ class PopChildMeasure extends React.Component<MeasureProps> {
     }
 }
 
-export function PopChild({ children, isPresent, anchorX }: Props) {
+export function PopChild({ children, isPresent, anchorX, root }: Props) {
     const id = useId()
     const ref = useRef<HTMLElement>(null)
     const size = useRef<Size>({
@@ -88,7 +91,10 @@ export function PopChild({ children, isPresent, anchorX }: Props) {
 
         const style = document.createElement("style")
         if (nonce) style.nonce = nonce
-        document.head.appendChild(style)
+
+        const parent = root ?? document.head;
+        parent.appendChild(style)
+
         if (style.sheet) {
             style.sheet.insertRule(`
           [data-motion-pop-id="${id}"] {
@@ -102,8 +108,10 @@ export function PopChild({ children, isPresent, anchorX }: Props) {
         }
 
         return () => {
-            if (document.head.contains(style)) {
-                document.head.removeChild(style)
+            parent.removeChild(style)
+
+            if (parent.contains(style)) {
+                parent.removeChild(style)
             }
         }
     }, [isPresent])

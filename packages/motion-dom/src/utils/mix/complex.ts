@@ -1,4 +1,5 @@
 import { pipe, warning } from "motion-utils"
+import { AnyResolvedKeyframe } from "../../animation/types"
 import { isCSSVariableToken } from "../../animation/utils/is-css-variable"
 import { color } from "../../value/types/color"
 import {
@@ -14,8 +15,8 @@ import { mixNumber as mixNumberImmediate } from "./number"
 import { invisibleValues, mixVisibility } from "./visibility"
 
 type MixableArray = Array<number | RGBA | HSLA | string>
-type MixableObject = {
-    [key: string]: string | number | RGBA | HSLA
+interface MixableObject {
+    [key: string]: AnyResolvedKeyframe | RGBA | HSLA
 }
 
 function mixNumber(a: number, b: number) {
@@ -97,8 +98,8 @@ function matchOrder(
 }
 
 export const mixComplex = (
-    origin: string | number,
-    target: string | number
+    origin: AnyResolvedKeyframe,
+    target: AnyResolvedKeyframe
 ) => {
     const template = complex.createTransformer(target)
     const originStats = analyseComplexValue(origin)
@@ -125,7 +126,8 @@ export const mixComplex = (
     } else {
         warning(
             true,
-            `Complex values '${origin}' and '${target}' too different to mix. Ensure all colors are of the same type, and that each contains the same quantity of number and color values. Falling back to instant transition.`
+            `Complex values '${origin}' and '${target}' too different to mix. Ensure all colors are of the same type, and that each contains the same quantity of number and color values. Falling back to instant transition.`,
+            "complex-values-different"
         )
 
         return mixImmediate(origin, target)

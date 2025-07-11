@@ -1,27 +1,29 @@
 import type {
+    AnyResolvedKeyframe,
     MotionValue,
     StartAnimation,
     UnresolvedKeyframes,
+    ValueTransition,
 } from "motion-dom"
 import {
     AsyncMotionValueAnimation,
     frame,
     getValueTransition,
+    JSAnimation,
     ValueAnimationOptions,
 } from "motion-dom"
 import { MotionGlobalConfig, secondsToMilliseconds } from "motion-utils"
 import type { VisualElement } from "../../render/VisualElement"
-import { Transition } from "../../types"
 import { getFinalKeyframe } from "../animators/waapi/utils/get-final-keyframe"
 import { getDefaultTransition } from "../utils/default-transitions"
 import { isTransitionDefined } from "../utils/is-transition-defined"
 
 export const animateMotionValue =
-    <V extends string | number>(
+    <V extends AnyResolvedKeyframe>(
         name: string,
         value: MotionValue<V>,
         target: V | UnresolvedKeyframes<V>,
-        transition: Transition & { elapsed?: number } = {},
+        transition: ValueTransition & { elapsed?: number } = {},
         element?: VisualElement<any>,
         isHandoff?: boolean
     ): StartAnimation =>
@@ -81,7 +83,7 @@ export const animateMotionValue =
          * Support deprecated way to set initial value. Prefer keyframe syntax.
          */
         if (options.from !== undefined) {
-            options.keyframes[0] = options.from
+            options.keyframes[0] = options.from as any
         }
 
         let shouldSkip = false
@@ -133,5 +135,7 @@ export const animateMotionValue =
             }
         }
 
-        return new AsyncMotionValueAnimation(options)
+        return valueTransition.isSync
+            ? new JSAnimation(options)
+            : new AsyncMotionValueAnimation(options)
     }
